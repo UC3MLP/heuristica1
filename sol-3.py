@@ -3,76 +3,116 @@
 import sys
 import subprocess
 import os
+import re
 
 
 def leer_fichero_in(ruta_in):
-    """
-    Lee el fichero .in respetando la estructura oficial:
-    Línea 1: <l> <h>
-    Línea 2: prioridades [p1, ..., pn]
-    Línea 3: pesos [w1, ..., wn]
-    Línea 4: capacidades [gamma1, ..., gamman]
-    """
     with open(ruta_in, 'r') as f:
         lineas = [linea.strip() for linea in f if linea.strip()]
 
-    #Dimensiones del pallet
     partes_dim = lineas[0].split()
-    l = int(partes_dim[0])  # Longitud del lado de la base
-    h = int(partes_dim[1])  # Número de niveles
+    l = int(partes_dim[0])
+    h = int(partes_dim[1])
 
-    #Prioridades, pesos, capacidades
     prioridades = list(map(int, lineas[1].split()))
     pesos = list(map(int, lineas[2].split()))
     capacidades = list(map(int, lineas[3].split()))
 
-    n = len(prioridades)  # Cantidad real de cajas disponibles
+    n = len(prioridades)
 
     return l, h, n, prioridades, pesos, capacidades
 
 
-def calcular_coste_medio_compacto(pallet, h, l, n):
-    """
-    Calcula el coste medio acumulando las prioridades de las cajas
-    que están por delante (entre la caja actual y la salida i = l-1).
-    """
-    coste_acumulado = 0.0
+def generar_fichero_dat(ruta_dat, l, h, n, prioridades, pesos, capacidades):
+    with open(ruta_dat, 'w') as f:
+        f.write(f"param l := {l};\n")
+        f.write(f"param h := {h};\n")
+        f.write(f"param n := {n};\n\n")
 
-    for s in range(h):
-        for j in range(l):
-            # Extraemos las cajas reales de arriba hacia abajo (hacia i = l-1)
-            cajas_reales = [pallet[s][i][j] for i in reversed(range(l)) if
-                            pallet[s][i][j] > 0]
+        f.write("param p :=\n")
+        for idx, val in enumerate(prioridades, 1):
+            f.write(f"  {idx} {val}\n")
+        f.write(";\n\n")
 
-            # Para cada caja, sumamos la prioridad de las cajas que están DELANTE de ella
-            for idx in range(len(cajas_reales)):
-                # cajas_reales[:idx] contiene las cajas entre la posición actual y la salida
-                coste_acumulado += sum(cajas_reales[:idx])
+        f.write("param w :=\n")
+        for idx, val in enumerate(pesos, 1):
+            f.write(f"  {idx} {val}\n")
+        f.write(";\n\n")
 
-    return coste_acumulado / n if n > 0 else 0.0
+        f.write("param gamma :=\n")
+        for idx, val in enumerate(capacidades, 1):
+            f.write(f"  {idx} {val}\n")
+        f.write(";\n")
+
+
+def parsear_solucion_glpk(ruta_sol_glpk, l, h):
+    pallet = [[[0 for _ in range(l)] for _ in range(l)] for _ in range(h)]
+
+    num_vars = 0
+    num_restrs = 0
+    obj_val = 0.0
+
+    with open(ruta_sol_glpk, 'r') as f:
+        lineas = f.readlines()
+
+    for line in lineas:
+        if "Rows:" in line:
+            m = re.search(r'Rows:\s+(\d+)', line)
+            if m: num_restrs = int(m.group(1))
+        elif "Columns:" in line:
+            m = re.search(r'Columns:\s+(\d+)', line)
+            if m: num_vars = int(m.group(1))
+        elif "Objective:" in line:
+            m = re.search(r'Objective:\s+\w+\s+=\s+([\d\.\+eE-]+)', line)
+            if m: obj_val = float(m.group(1))
+
+        # Parseo de las variables binarias x[k,s,i,j] = 1
+        if line.strip().startswith("x["):
+            partes = line.split()
+            var_name = partes[1]
+            # En GLPK la columna del valor de la variable suele ser la 3ª (índice 3 o 2)
+            val = float(partes[3]) if len(partes) > 3 else float(partes[2])
+
+            if abs(val - 1.0) < 1e-4:
+                m_var = re.search(r'x\[(\d+),(\d+),(\d+),(\d+)\]', var_name)
+                if m_var:
+                    k = int(m_var.group(1))
+                    s = int(m_var.group(2)) - 1
+                    i = int(m_var.group(3)) - 1
+                    j = int(m_var.group(4)) - 1
+                    pallet[s][i][j] = k
+
+    return pallet, num_vars, num_restrs, obj_val
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Uso: ./sol-3.py <fichero.in>")
+    if len(sys.argv) < 3:
+        print("Uso: ./sol-3.py <fichero-entrada> <fichero-salida.dat>")
         sys.exit(1)
 
     fichero_in = sys.argv[1]
-    nombre_base = os.path.splitext(fichero_in)[0]
-    fichero_sol = f"{nombre_base}.sol.txt"
-    fichero_mod = "parte-3.mod"
+    fichero_dat = sys.argv[2]
 
-    #Leer datos entrada
+    dir_script = os.path.dirname(os.path.abspath(__file__))
+    fichero_mod = os.path.join(dir_script, "parte-3.mod")
+
+    nombre_base = os.path.splitext(fichero_in)[0]
+    fichero_sol_txt = f"{nombre_base}.sol.txt"
+    fichero_sol_glpk = f"{nombre_base}.glpksol"
+
     l, h, n, prioridades, pesos, capacidades = leer_fichero_in(fichero_in)
 
-    #Ejecutar GLPK (glpsol) --> archivo .mod
+    # 1. Generar archivo .dat
+    generar_fichero_dat(fichero_dat, l, h, n, prioridades, pesos, capacidades)
+
+    # 2. Ejecutar Solver GLPK
     cmd = [
         "glpsol",
         "--mod", fichero_mod,
-        "--data", fichero_in,
-        "--display", "solucion.out"]
+        "--data", fichero_dat,
+        "-o", fichero_sol_glpk
+    ]
 
-    #archivo de log/display:
     resultado = subprocess.run(cmd, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True)
     if resultado.returncode != 0:
@@ -80,29 +120,31 @@ def main():
         print(resultado.stderr)
         sys.exit(1)
 
-    #matriz 3D 'pallet[s][i][j]' con los resultados de x[k,s,i,j] -->
-    # inicializada con 0s para cajas vacias.
-    pallet = [[[0 for _ in range(l)] for _ in range(l)] for _ in range(h)]
+    # 3. Extraer resultados
+    pallet, num_vars, num_restrs, coste_medio = parsear_solucion_glpk(
+        fichero_sol_glpk, l, h)
 
-    #Calcular el Coste Medio compactado exacto en Python
-    coste_medio = calcular_coste_medio_compacto(pallet, h, l, n)
+    # 4. Imprimir la salida estándar requerida: <vars> <restrs> <obj>
+    print(f"{num_vars} {num_restrs} {coste_medio:.2f}")
 
-    # Generar la salida requerida (.sol.txt y pantalla)
-    print(f"Coste Medio: {coste_medio:.2f}")
-
-    with open(fichero_sol, 'w') as f_sol:
+    # 5. Generar archivo gráfico de salida con la disposición final
+    with open(fichero_sol_txt, 'w') as f_sol:
         f_sol.write(f"Coste Medio: {coste_medio:.2f}\n\n")
 
         for s in range(h):
             f_sol.write(f"-- Nivel {s + 1} --\n")
-            # Imprimimos de arriba hacia abajo
             for i in reversed(range(l)):
                 fila_str = []
                 for j in range(l):
                     val = pallet[s][i][j]
-                    fila_str.append(str(val) if val > 0 else ".")
+                    fila_str.append(f"{val:2d}" if val > 0 else " .")
                 f_sol.write(" ".join(fila_str) + "\n")
             f_sol.write("\n")
+
+    # Limpieza de archivo temporal de GLPK
+    if os.path.exists(fichero_sol_glpk):
+        os.remove(fichero_sol_glpk)
+
 
 if __name__ == "__main__":
     main()
