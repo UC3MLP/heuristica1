@@ -31,24 +31,23 @@ def leer_fichero_in(ruta_in):
     return l, h, n, prioridades, pesos, capacidades
 
 
-def calcular_coste_medio_compactado(pallet, h, l, n):
+def calcular_coste_medio_retencion(pallet, h, l, n):
     """
-    Calcula el coste medio ignorando las posiciones vacías (0)
-    y compactando las cajas reales hacia la salida.
+    Calcula el coste medio acumulando las prioridades de las cajas
+    que están por delante (entre la caja actual y la salida i = l-1).
     """
     coste_acumulado = 0.0
 
     for s in range(h):
         for j in range(l):
-            # Recorremos de arriba hacia abajo (i = l-1 , i = 0):
-            # La primera caja real en la fila superior es la más cercana a
-            # la salida.
+            # Extraemos las cajas reales de arriba hacia abajo (hacia i = l-1)
             cajas_reales = [pallet[s][i][j] for i in reversed(range(l)) if
                             pallet[s][i][j] > 0]
 
-            # Asignamos distancia efectiva según orden relativo
-            for pos_efectiva, prioridad in enumerate(cajas_reales):
-                coste_acumulado += pos_efectiva * prioridad
+            # Para cada caja, sumamos la prioridad de las cajas que están DELANTE de ella
+            for idx in range(len(cajas_reales)):
+                # cajas_reales[:idx] contiene las cajas entre la posición actual y la salida
+                coste_acumulado += sum(cajas_reales[:idx])
 
     return coste_acumulado / n if n > 0 else 0.0
 

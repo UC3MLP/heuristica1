@@ -11,6 +11,7 @@ set CAJAS := 1..n;
 set NIVELES := 1..h;
 set FILAS := 1..l;
 set COLUMNAS := 1..l;
+
 param p {k in CAJAS}, integer, >= 1;
 param w {k in CAJAS}, >= 0;
 param gamma {k in CAJAS}, >= 0;
@@ -20,7 +21,7 @@ var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary; /* x[k,s,i,
 /* FUNC OBJ: coste medio */
 minimize CosteMedio:
     (1/n) * sum {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}
-        (i-1) * p[k] * x[k,s,i,j];
+        (l-i) * p[k] * x[k,s,i,j];
 
 /* RESTR: una pos por caja */
 s.t. UnaPosicionPorCaja {k in CAJAS}:
