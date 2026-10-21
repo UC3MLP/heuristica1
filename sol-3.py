@@ -1,86 +1,109 @@
 #!/usr/bin/env python3
 
-import re
-import subprocess
 import sys
-from pathlib import Path
-from tempfile import TemporaryDirectory
+import subprocess
+import os
 
-# devolver ruta de fichero
-def ruta(nombre):
-    p = Path(nombre)
-    if not p.is_absolute() and p.parent == Path("."):
-        return Path(__file__).resolve().parent / p
-    return p.resolve()
+
+def leer_fichero_in(ruta_in):
+    """
+    Lee el fichero .in respetando la estructura oficial:
+    Línea 1: <l> <h>
+    Línea 2: prioridades [p1, ..., pn]
+    Línea 3: pesos [w1, ..., wn]
+    Línea 4: capacidades [gamma1, ..., gamman]
+    """
+    with open(ruta_in, 'r') as f:
+        lineas = [linea.strip() for linea in f if linea.strip()]
+
+    #Dimensiones del pallet
+    partes_dim = lineas[0].split()
+    l = int(partes_dim[0])  # Longitud del lado de la base
+    h = int(partes_dim[1])  # Número de niveles
+
+    #Prioridades, pesos, capacidades
+    prioridades = list(map(int, lineas[1].split()))
+    pesos = list(map(int, lineas[2].split()))
+    capacidades = list(map(int, lineas[3].split()))
+
+    n = len(prioridades)  # Cantidad real de cajas disponibles
+
+    return l, h, n, prioridades, pesos, capacidades
+
+
+def calcular_coste_medio_compactado(pallet, h, l, n):
+    """
+    Calcula el coste medio ignorando las posiciones vacías (0)
+    y compactando las cajas reales hacia la salida.
+    """
+    coste_acumulado = 0.0
+
+    for s in range(h):
+        for j in range(l):
+            # Recorremos de arriba hacia abajo (i = l-1 , i = 0):
+            # La primera caja real en la fila superior es la más cercana a
+            # la salida.
+            cajas_reales = [pallet[s][i][j] for i in reversed(range(l)) if
+                            pallet[s][i][j] > 0]
+
+            # Asignamos distancia efectiva según orden relativo
+            for pos_efectiva, prioridad in enumerate(cajas_reales):
+                coste_acumulado += pos_efectiva * prioridad
+
+    return coste_acumulado / n if n > 0 else 0.0
 
 
 def main():
-    if len(sys.argv) != 3: # si arg distinto de 3... comprobando 2 elementos
-        sys.exit("Uso: ./sol-3.py entrada.in datos.dat")
-    entrada, datos = ruta(sys.argv[1]), ruta(sys.argv[2])
-    modelo = Path(__file__).resolve().parent / "parte-3.mod" # rutas guardadas
+    if len(sys.argv) < 2:
+        print("Uso: ./sol-3.py <fichero.in>")
+        sys.exit(1)
 
-    lineas = [l.strip() for l in entrada.read_text().splitlines() if l.strip()]
-    encabezado = lineas[0].split()
-    l, h = int(encabezado[0]), int(encabezado[1])
-    prioridades = [int(p) for p in lineas[1].split()]
-    pesos = [float(w) for w in lineas[2].split()]
-    capacidades = [float(g) for g in lineas[3].split()]
+    fichero_in = sys.argv[1]
+    nombre_base = os.path.splitext(fichero_in)[0]
+    fichero_sol = f"{nombre_base}.sol.txt"
+    fichero_mod = "parte-3.mod"
 
-    n = len(prioridades) # vemos prioridades, lado, niveles, y n real de cajas
-    if l < 1 or h < 1 or n < 1 or n > h * l * l or len(pesos) != n or len(capacidades) != n or any(p < 1 for p in prioridades):
-        sys.exit("Entrada no valida")
+    #Leer datos entrada
+    l, h, n, prioridades, pesos, capacidades = leer_fichero_in(fichero_in)
 
-    M_val = max(prioridades) + 1000 # Big-M adaptativo
+    #Ejecutar GLPK (glpsol) --> archivo .mod
+    cmd = [
+        "glpsol",
+        "--mod", fichero_mod,
+        "--data", fichero_in,
+        "--display", "solucion.out"]
 
-    # generamos .dat MathProg
-    with datos.open("w") as f:
-        f.write(f"data;\nparam l := {l};\nparam h := {h};\nparam n := {n};\nparam M := {M_val};\n") # cabecera
-        f.write("param p :=\n")
-        for k, p in enumerate(prioridades, 1):
-            f.write(f"{k} {p}\n")
-        f.write(";\nparam w :=\n")
-        for k, w in enumerate(pesos, 1):
-            f.write(f"{k} {w}\n")
-        f.write(";\nparam gamma :=\n")
-        for k, g in enumerate(capacidades, 1):
-            f.write(f"{k} {g}\n")
-        f.write(";\nend;\n")
+    #archivo de log/display:
+    resultado = subprocess.run(cmd, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True)
+    if resultado.returncode != 0:
+        print("Error ejecutando glpsol:")
+        print(resultado.stderr)
+        sys.exit(1)
 
-    # GLPK!
-    with TemporaryDirectory() as carpeta:
-        informe = Path(carpeta) / "resultado.txt"
-        proceso = subprocess.run(["glpsol", "-m", str(modelo), "-d", str(datos), "-o", str(informe)], capture_output=True, text=True)
-        if proceso.returncode != 0: # error
-            sys.exit(proceso.stderr or proceso.stdout)
-        texto = informe.read_text()
-    if "INTEGER OPTIMAL" not in texto: # no int óptimo !!
-        sys.exit("GLPK no ha encontrado una solucion entera optima")
+    #matriz 3D 'pallet[s][i][j]' con los resultados de x[k,s,i,j] -->
+    # inicializada con 0s para cajas vacias.
+    pallet = [[[0 for _ in range(l)] for _ in range(l)] for _ in range(h)]
 
-    # recuperamos cajas
-    pallet = [[[0] * l for _ in range(l)] for _ in range(h)] # matriz 3d
-    for k, s, i, j, valor in re.findall(r"^\s*\d+\s+x\[(\d+),(\d+),(\d+),(\d+)\]\s+\*?\s*([01])(?=\s|$)", texto, re.MULTILINE):
-        # extraemos:
-        # k: id caja, s: nivel, i: fila, j: columna, valor: 0/1
-        if valor == "1":
-            pallet[int(s)-1][int(i)-1][int(j)-1] = prioridades[int(k)-1] # colocamos
+    #Calcular el Coste Medio compactado exacto en Python
+    coste_medio = calcular_coste_medio_compactado(pallet, h, l, n)
 
-    # num var, restr, coste medio
-    coste = sum(i * pallet[s][i][j] for s in range(h) for i in range(l) for j in range(l) if pallet[s][i][j] > 0) / n
-    num_vars = n * h * l * l
-    num_restr = n + (h * l * l) + ((h - 1) * l * l) + (h * (l - 1) * l) + ((h - 1) * l * l)
-    print(f"{num_vars} {num_restr} {coste:.10g}")
+    # Generar la salida requerida (.sol.txt y pantalla)
+    print(f"Coste Medio: {coste_medio:.2f}")
 
-    # guardo distr
-    salida = datos.with_suffix(".sol.txt")
-    with salida.open("w") as f:
+    with open(fichero_sol, 'w') as f_sol:
+        f_sol.write(f"Coste Medio: {coste_medio:.2f}\n\n")
+
         for s in range(h):
-            f.write(f"--- Nivel {s+1} ---\n")
-            for i in range(l-1, -1, -1):
-                fila_str = [str(val) if val > 0 else "." for val in pallet[s][i]]
-                f.write(" ".join(fila_str) + "\n")
-            f.write("\n")
-
+            f_sol.write(f"-- Nivel {s + 1} --\n")
+            # Imprimimos de arriba hacia abajo
+            for i in reversed(range(l)):
+                fila_str = []
+                for j in range(l):
+                    val = pallet[s][i][j]
+                    fila_str.append(str(val) if val > 0 else ".")
+                f_sol.write(" ".join(fila_str) + "\n")
+            f_sol.write("\n")
 
 if __name__ == "__main__":
     main()
