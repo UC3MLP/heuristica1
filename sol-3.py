@@ -31,7 +31,7 @@ def leer_fichero_in(ruta_in):
     return l, h, n, prioridades, pesos, capacidades
 
 
-def calcular_coste_medio_retencion(pallet, h, l, n):
+def calcular_coste_medio_compacto(pallet, h, l, n):
     """
     Calcula el coste medio acumulando las prioridades de las cajas
     que están por delante (entre la caja actual y la salida i = l-1).
@@ -85,7 +85,7 @@ def main():
     pallet = [[[0 for _ in range(l)] for _ in range(l)] for _ in range(h)]
 
     #Calcular el Coste Medio compactado exacto en Python
-    coste_medio = calcular_coste_medio_compactado(pallet, h, l, n)
+    coste_medio = calcular_coste_medio_compacto(pallet, h, l, n)
 
     # Generar la salida requerida (.sol.txt y pantalla)
     print(f"Coste Medio: {coste_medio:.2f}")
