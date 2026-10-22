@@ -1,4 +1,4 @@
-/* p3: Pallets INCOMPLETAS */
+/* p3: cajas INCOMPLETAS */
 
 param l, integer, >= 1;
 param h, integer, >= 1;
@@ -15,17 +15,24 @@ param p {k in CAJAS}, integer, >= 1;
 param w {k in CAJAS}, >= 0;
 param gamma {k in CAJAS}, >= 0;
 
-var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary; /* x[k,s,i,j] = 1 si caja k en pos (s,i,j) */
-var P {s in NIVELES, i in FILAS, j in COLUMNAS}, >= 0; /* P[s,i,j] = prioridad en celda (s,i,j) */
+var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary;
+        /*  x[k,s,i,j] = 1 si caja k en pos (s,i,j) */
+var P {s in NIVELES, i in FILAS, j in COLUMNAS}, >= 0;
+        /* P[s,i,j] = prioridad en celda (s,i,j) */
+var C {s in NIVELES, i in FILAS, j in COLUMNAS}, >= 0;
+        /* C[s,i,j] = coste soportado por celda (s,i,j) */
 
-/* FUNC OBJ: coste medio acumulando prioridades delanteras (i' > i) */
+/* FUNC OBJ: coste medio real de las cajas presentes */
 minimize CosteMedio:
-    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}
-        sum {i_prime in FILAS: i_prime > i} P[s,i_prime,j];
+    (1/n) * sum {s in NIVELES, i in FILAS, j in COLUMNAS} C[s,i,j];
 
-/* RESTR: definicion de la variable auxiliar P */
+/* RESTR: definicion de la prioridad P */
 s.t. DefPrioridadPosicion {s in NIVELES, i in FILAS, j in COLUMNAS}:
     P[s,i,j] = sum {k in CAJAS} p[k] * x[k,s,i,j];
+
+/* RESTR: definicion del coste C solo si la posicion está OCUPADA (mediante Big-M) */
+s.t. DefCostePosicion {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}:
+    C[s,i,j] >= sum {i_prime in FILAS: i_prime > i} P[s,i_prime,j] - M * (1 - sum {k in CAJAS} x[k,s,i,j]);
 
 /* RESTR: una pos por caja */
 s.t. UnaPosicionPorCaja {k in CAJAS}:

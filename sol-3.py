@@ -24,13 +24,12 @@ def main():
     prioridades = [int(p) for p in lineas[1].split()]
     pesos = [int(w) for w in lineas[2].split()]
     capacidades = [int(g) for g in lineas[3].split()]
-    n = len(
-        prioridades)  # vemos prioridades, dimensiones, y n de cajas[cite: 3]
+    n = len(prioridades)  # vemos prioridades, dimensiones, y n de cajas
 
     if l < 1 or h < 1 or n < 1 or n > h * l * l:
         sys.exit("Entrada no valida")
 
-    # generamos .dat MathProg[cite: 1]
+    # generamos .dat MathProg
     with datos.open("w") as f:
         f.write(
             f"data;\nparam l := {l};\nparam h := {h};\nparam n := {n};\n\n")
@@ -60,12 +59,12 @@ def main():
     # recuperamos cajas en la matriz 3D
     pallet = [[[0] * l for _ in range(l)] for _ in range(h)]
 
-    # Expresión regular ajustada para capturar las variables asignadas x[k,s,i,j] = 1[cite: 1]
+    # recuperamos unicamente las posiciones con x[k,s,i,j] = 1
     patron = r"x\[(\d+),(\d+),(\d+),(\d+)\]\s+\*?\s*1"
     for k, s, i, j in re.findall(patron, texto):
         pallet[int(s) - 1][int(i) - 1][int(j) - 1] = prioridades[int(k) - 1]
 
-    # parseo de num vars, restrs, y coste objetivo[cite: 1, 2]
+    # parseo de num vars, restrs, y coste objetivo directamente del informe de GLPK
     m_vars = re.search(r"Columns:\s+(\d+)", texto)
     m_rows = re.search(r"Rows:\s+(\d+)", texto)
     m_obj = re.search(r"Objective:\s+\w+\s+=\s+([\d\.\+eE-]+)", texto)
@@ -74,16 +73,16 @@ def main():
     num_restrs = m_rows.group(1) if m_rows else "0"
     coste_obj = float(m_obj.group(1)) if m_obj else 0.0
 
-    # salida estandar exigida por la practica: <vars> <restrs> <obj>[cite: 1, 2]
+    # salida estandar exigida por la practica: <vars> <restrs> <coste_medio>
     print(f"{num_vars} {num_restrs} {coste_obj:.10g}")
 
-    # guardo distr (.sol.txt)[cite: 1]
+    # guardo distr (.sol.txt)
     salida = datos.with_suffix(".sol.txt")
     with salida.open("w") as f:
         f.write(f"Coste Medio: {coste_obj:.2f}\n\n")
         for s in range(h):
             f.write(f"-- Nivel {s + 1} --\n")
-            # imprimimos desde la fila de salida i = l (arriba) hasta la fila del fondo i = 1 (abajo)[cite: 2, 3]
+            # imprimimos desde la salida (i = l, arriba) hacia el fondo (i = 1, abajo)
             for i in range(l - 1, -1, -1):
                 fila_str = [
                     f"{pallet[s][i][j]:2d}" if pallet[s][i][j] > 0 else " ."
