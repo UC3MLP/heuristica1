@@ -14,24 +14,26 @@ def ruta(nombre):
     return p.resolve()
 
 def main():
-    if len(sys.argv) != 3: # si arg distinto de 3... comprobando 2 elementos
+    if len(sys.argv) != 3:  # si arg distinto de 3... comprobando 2 elementos
         sys.exit("Uso: ./sol-3.py entrada.in datos.dat")
     entrada, datos = ruta(sys.argv[1]), ruta(sys.argv[2])
-    modelo = Path(__file__).resolve().parent / "parte-3.mod" # rutas guardadas
+    modelo = Path(__file__).resolve().parent / "parte-3.mod"  # rutas guardadas
 
     lineas = [l.strip() for l in entrada.read_text().splitlines() if l.strip()]
     l, h = map(int, lineas[0].split())
     prioridades = [int(p) for p in lineas[1].split()]
     pesos = [int(w) for w in lineas[2].split()]
     capacidades = [int(g) for g in lineas[3].split()]
-    n = len(prioridades)   # vemos prioridades, dimensiones, y n de cajas
+    n = len(
+        prioridades)  # vemos prioridades, dimensiones, y n de cajas[cite: 3]
 
     if l < 1 or h < 1 or n < 1 or n > h * l * l:
         sys.exit("Entrada no valida")
 
-    # generamos .dat MathProg
+    # generamos .dat MathProg[cite: 1]
     with datos.open("w") as f:
-        f.write(f"data;\nparam l := {l};\nparam h := {h};\nparam n := {n};\n\n")
+        f.write(
+            f"data;\nparam l := {l};\nparam h := {h};\nparam n := {n};\n\n")
         f.write("param p :=\n")
         for k, p in enumerate(prioridades, 1):
             f.write(f"{k} {p}\n")
@@ -46,20 +48,24 @@ def main():
     # GLPK!
     with TemporaryDirectory() as carpeta:
         informe = Path(carpeta) / "resultado.txt"
-        proceso = subprocess.run(["glpsol", "-m", str(modelo), "-d", str(datos), "-o", str(informe)], capture_output=True, text=True)
-        if proceso.returncode != 0:     # error
+        proceso = subprocess.run(
+            ["glpsol", "-m", str(modelo), "-d", str(datos), "-o",
+             str(informe)], capture_output=True, text=True)
+        if proceso.returncode != 0:  # error
             sys.exit(proceso.stderr or proceso.stdout)
         texto = informe.read_text()
     if "INTEGER OPTIMAL" not in texto:  # no int óptimo !!
         sys.exit("GLPK no ha encontrado una solucion entera optima")
 
-    # recuperamos cajas y estadisticas de GLPK
-    pallet = [[[0] * l for _ in range(l)] for _ in range(h)]   # matriz 3D
-    for k, s, i, j, valor in re.findall(r"^\s*\d+\s+x\[(\d+),(\d+),(\d+),(\d+)\]\s+\*?\s*([01])(?=\s|$)", texto, re.MULTILINE):
-        if valor == "1":
-            pallet[int(s)-1][int(i)-1][int(j)-1] = prioridades[int(k)-1]  # colocamos prioridad
+    # recuperamos cajas en la matriz 3D
+    pallet = [[[0] * l for _ in range(l)] for _ in range(h)]
 
-    # parseo de num vars, restrs, y coste objetivo
+    # Expresión regular ajustada para capturar las variables asignadas x[k,s,i,j] = 1[cite: 1]
+    patron = r"x\[(\d+),(\d+),(\d+),(\d+)\]\s+\*?\s*1"
+    for k, s, i, j in re.findall(patron, texto):
+        pallet[int(s) - 1][int(i) - 1][int(j) - 1] = prioridades[int(k) - 1]
+
+    # parseo de num vars, restrs, y coste objetivo[cite: 1, 2]
     m_vars = re.search(r"Columns:\s+(\d+)", texto)
     m_rows = re.search(r"Rows:\s+(\d+)", texto)
     m_obj = re.search(r"Objective:\s+\w+\s+=\s+([\d\.\+eE-]+)", texto)
@@ -68,17 +74,20 @@ def main():
     num_restrs = m_rows.group(1) if m_rows else "0"
     coste_obj = float(m_obj.group(1)) if m_obj else 0.0
 
-    # num var, restr, coste medio
+    # salida estandar exigida por la practica: <vars> <restrs> <obj>[cite: 1, 2]
     print(f"{num_vars} {num_restrs} {coste_obj:.10g}")
 
-    # guardo distr (.sol.txt)
+    # guardo distr (.sol.txt)[cite: 1]
     salida = datos.with_suffix(".sol.txt")
     with salida.open("w") as f:
         f.write(f"Coste Medio: {coste_obj:.2f}\n\n")
         for s in range(h):
             f.write(f"-- Nivel {s + 1} --\n")
-            for i in range(l-1, -1, -1):
-                fila_str = [str(val) if val > 0 else "." for val in pallet[s][i]]
+            # imprimimos desde la fila de salida i = l (arriba) hasta la fila del fondo i = 1 (abajo)[cite: 2, 3]
+            for i in range(l - 1, -1, -1):
+                fila_str = [
+                    f"{pallet[s][i][j]:2d}" if pallet[s][i][j] > 0 else " ."
+                    for j in range(l)]
                 f.write(" ".join(fila_str) + "\n")
             f.write("\n")
 
