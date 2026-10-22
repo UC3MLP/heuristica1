@@ -1,150 +1,86 @@
 #!/usr/bin/env python3
 
-import sys
-import subprocess
-import os
 import re
+import subprocess
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-
-def leer_fichero_in(ruta_in):
-    with open(ruta_in, 'r') as f:
-        lineas = [linea.strip() for linea in f if linea.strip()]
-
-    partes_dim = lineas[0].split()
-    l = int(partes_dim[0])
-    h = int(partes_dim[1])
-
-    prioridades = list(map(int, lineas[1].split()))
-    pesos = list(map(int, lineas[2].split()))
-    capacidades = list(map(int, lineas[3].split()))
-
-    n = len(prioridades)
-
-    return l, h, n, prioridades, pesos, capacidades
-
-
-def generar_fichero_dat(ruta_dat, l, h, n, prioridades, pesos, capacidades):
-    with open(ruta_dat, 'w') as f:
-        f.write(f"param l := {l};\n")
-        f.write(f"param h := {h};\n")
-        f.write(f"param n := {n};\n\n")
-
-        f.write("param p :=\n")
-        for idx, val in enumerate(prioridades, 1):
-            f.write(f"  {idx} {val}\n")
-        f.write(";\n\n")
-
-        f.write("param w :=\n")
-        for idx, val in enumerate(pesos, 1):
-            f.write(f"  {idx} {val}\n")
-        f.write(";\n\n")
-
-        f.write("param gamma :=\n")
-        for idx, val in enumerate(capacidades, 1):
-            f.write(f"  {idx} {val}\n")
-        f.write(";\n")
-
-
-def parsear_solucion_glpk(ruta_sol_glpk, l, h):
-    pallet = [[[0 for _ in range(l)] for _ in range(l)] for _ in range(h)]
-
-    num_vars = 0
-    num_restrs = 0
-    obj_val = 0.0
-
-    with open(ruta_sol_glpk, 'r') as f:
-        lineas = f.readlines()
-
-    for line in lineas:
-        if "Rows:" in line:
-            m = re.search(r'Rows:\s+(\d+)', line)
-            if m: num_restrs = int(m.group(1))
-        elif "Columns:" in line:
-            m = re.search(r'Columns:\s+(\d+)', line)
-            if m: num_vars = int(m.group(1))
-        elif "Objective:" in line:
-            m = re.search(r'Objective:\s+\w+\s+=\s+([\d\.\+eE-]+)', line)
-            if m: obj_val = float(m.group(1))
-
-        # Parseo de las variables binarias x[k,s,i,j] = 1
-        if line.strip().startswith("x["):
-            partes = line.split()
-            var_name = partes[1]
-            # En GLPK la columna del valor de la variable suele ser la 3ª (índice 3 o 2)
-            val = float(partes[3]) if len(partes) > 3 else float(partes[2])
-
-            if abs(val - 1.0) < 1e-4:
-                m_var = re.search(r'x\[(\d+),(\d+),(\d+),(\d+)\]', var_name)
-                if m_var:
-                    k = int(m_var.group(1))
-                    s = int(m_var.group(2)) - 1
-                    i = int(m_var.group(3)) - 1
-                    j = int(m_var.group(4)) - 1
-                    pallet[s][i][j] = k
-
-    return pallet, num_vars, num_restrs, obj_val
-
+# devolver ruta de fichero
+def ruta(nombre):
+    p = Path(nombre)
+    if not p.is_absolute() and p.parent == Path("."):
+        return Path(__file__).resolve().parent / p
+    return p.resolve()
 
 def main():
-    if len(sys.argv) < 3:
-        print("Uso: ./sol-3.py <fichero-entrada> <fichero-salida.dat>")
-        sys.exit(1)
+    if len(sys.argv) != 3: # si arg distinto de 3... comprobando 2 elementos
+        sys.exit("Uso: ./sol-3.py entrada.in datos.dat")
+    entrada, datos = ruta(sys.argv[1]), ruta(sys.argv[2])
+    modelo = Path(__file__).resolve().parent / "parte-3.mod" # rutas guardadas
 
-    fichero_in = sys.argv[1]
-    fichero_dat = sys.argv[2]
+    lineas = [l.strip() for l in entrada.read_text().splitlines() if l.strip()]
+    l, h = map(int, lineas[0].split())
+    prioridades = [int(p) for p in lineas[1].split()]
+    pesos = [int(w) for w in lineas[2].split()]
+    capacidades = [int(g) for g in lineas[3].split()]
+    n = len(prioridades)   # vemos prioridades, dimensiones, y n de cajas
 
-    dir_script = os.path.dirname(os.path.abspath(__file__))
-    fichero_mod = os.path.join(dir_script, "parte-3.mod")
+    if l < 1 or h < 1 or n < 1 or n > h * l * l:
+        sys.exit("Entrada no valida")
 
-    nombre_base = os.path.splitext(fichero_in)[0]
-    fichero_sol_txt = f"{nombre_base}.sol.txt"
-    fichero_sol_glpk = f"{nombre_base}.glpksol"
+    # generamos .dat MathProg
+    with datos.open("w") as f:
+        f.write(f"data;\nparam l := {l};\nparam h := {h};\nparam n := {n};\n\n")
+        f.write("param p :=\n")
+        for k, p in enumerate(prioridades, 1):
+            f.write(f"{k} {p}\n")
+        f.write(";\n\nparam w :=\n")
+        for k, w in enumerate(pesos, 1):
+            f.write(f"{k} {w}\n")
+        f.write(";\n\nparam gamma :=\n")
+        for k, g in enumerate(capacidades, 1):
+            f.write(f"{k} {g}\n")
+        f.write(";\nend;\n")
 
-    l, h, n, prioridades, pesos, capacidades = leer_fichero_in(fichero_in)
+    # GLPK!
+    with TemporaryDirectory() as carpeta:
+        informe = Path(carpeta) / "resultado.txt"
+        proceso = subprocess.run(["glpsol", "-m", str(modelo), "-d", str(datos), "-o", str(informe)], capture_output=True, text=True)
+        if proceso.returncode != 0:     # error
+            sys.exit(proceso.stderr or proceso.stdout)
+        texto = informe.read_text()
+    if "INTEGER OPTIMAL" not in texto:  # no int óptimo !!
+        sys.exit("GLPK no ha encontrado una solucion entera optima")
 
-    # 1. Generar archivo .dat
-    generar_fichero_dat(fichero_dat, l, h, n, prioridades, pesos, capacidades)
+    # recuperamos cajas y estadisticas de GLPK
+    pallet = [[[0] * l for _ in range(l)] for _ in range(h)]   # matriz 3D
+    for k, s, i, j, valor in re.findall(r"^\s*\d+\s+x\[(\d+),(\d+),(\d+),(\d+)\]\s+\*?\s*([01])(?=\s|$)", texto, re.MULTILINE):
+        if valor == "1":
+            pallet[int(s)-1][int(i)-1][int(j)-1] = prioridades[int(k)-1]  # colocamos prioridad
 
-    # 2. Ejecutar Solver GLPK
-    cmd = [
-        "glpsol",
-        "--mod", fichero_mod,
-        "--data", fichero_dat,
-        "-o", fichero_sol_glpk
-    ]
+    # parseo de num vars, restrs, y coste objetivo
+    m_vars = re.search(r"Columns:\s+(\d+)", texto)
+    m_rows = re.search(r"Rows:\s+(\d+)", texto)
+    m_obj = re.search(r"Objective:\s+\w+\s+=\s+([\d\.\+eE-]+)", texto)
 
-    resultado = subprocess.run(cmd, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, text=True)
-    if resultado.returncode != 0:
-        print("Error ejecutando glpsol:")
-        print(resultado.stderr)
-        sys.exit(1)
+    num_vars = m_vars.group(1) if m_vars else "0"
+    num_restrs = m_rows.group(1) if m_rows else "0"
+    coste_obj = float(m_obj.group(1)) if m_obj else 0.0
 
-    # 3. Extraer resultados
-    pallet, num_vars, num_restrs, coste_medio = parsear_solucion_glpk(
-        fichero_sol_glpk, l, h)
+    # num var, restr, coste medio
+    print(f"{num_vars} {num_restrs} {coste_obj:.10g}")
 
-    # 4. Imprimir la salida estándar requerida: <vars> <restrs> <obj>
-    print(f"{num_vars} {num_restrs} {coste_medio:.2f}")
-
-    # 5. Generar archivo gráfico de salida con la disposición final
-    with open(fichero_sol_txt, 'w') as f_sol:
-        f_sol.write(f"Coste Medio: {coste_medio:.2f}\n\n")
-
+    # guardo distr (.sol.txt)
+    salida = datos.with_suffix(".sol.txt")
+    with salida.open("w") as f:
+        f.write(f"Coste Medio: {coste_obj:.2f}\n\n")
         for s in range(h):
-            f_sol.write(f"-- Nivel {s + 1} --\n")
-            for i in reversed(range(l)):
-                fila_str = []
-                for j in range(l):
-                    val = pallet[s][i][j]
-                    fila_str.append(f"{val:2d}" if val > 0 else " .")
-                f_sol.write(" ".join(fila_str) + "\n")
-            f_sol.write("\n")
-
-    # Limpieza de archivo temporal de GLPK
-    if os.path.exists(fichero_sol_glpk):
-        os.remove(fichero_sol_glpk)
-
+            f.write(f"-- Nivel {s + 1} --\n")
+            for i in range(l-1, -1, -1):
+                fila_str = [str(val) if val > 0 else "." for val in pallet[s][i]]
+                f.write(" ".join(fila_str) + "\n")
+            f.write("\n")
 
 if __name__ == "__main__":
     main()

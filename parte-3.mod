@@ -1,4 +1,4 @@
-/* parte-3.mod: Pallets incompletos */
+/* p3: Pallets INCOMPLETAS */
 
 param l, integer, >= 1;
 param h, integer, >= 1;
@@ -15,35 +15,39 @@ param p {k in CAJAS}, integer, >= 1;
 param w {k in CAJAS}, >= 0;
 param gamma {k in CAJAS}, >= 0;
 
-var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary;
+var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary; /* x[k,s,i,j] = 1 si caja k en pos (s,i,j) */
+var P {s in NIVELES, i in FILAS, j in COLUMNAS}, >= 0; /* P[s,i,j] = prioridad en celda (s,i,j) */
 
-/* FUNC. OBJ: Coste medio real de las n cajas */
+/* FUNC OBJ: coste medio acumulando prioridades delanteras (i' > i) */
 minimize CosteMedio:
-    (1/n) * sum {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}
-        (l - i) * p[k] * x[k,s,i,j];
+    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}
+        sum {i_prime in FILAS: i_prime > i} P[s,i_prime,j];
 
-/* RESTR: Cada caja debe asignarse a exactamente una posición */
+/* RESTR: definicion de la variable auxiliar P */
+s.t. DefPrioridadPosicion {s in NIVELES, i in FILAS, j in COLUMNAS}:
+    P[s,i,j] = sum {k in CAJAS} p[k] * x[k,s,i,j];
+
+/* RESTR: una pos por caja */
 s.t. UnaPosicionPorCaja {k in CAJAS}:
     sum {s in NIVELES, i in FILAS, j in COLUMNAS} x[k,s,i,j] = 1;
 
-/* RESTR: Como máximo una caja por posición */
+/* RESTR: maximo una caja por pos */
 s.t. MaxUnaCajaPorPosicion {s in NIVELES, i in FILAS, j in COLUMNAS}:
     sum {k in CAJAS} x[k,s,i,j] <= 1;
 
-/* RESTR: Gravedad / Soporte vertical */
-s.t. FloatingBox {s in NIVELES, i in FILAS, j in COLUMNAS: s < h}:
-    sum {k in CAJAS} x[k,s+1,i,j] <= sum {k in CAJAS} x[k,s,i,j];
-
-/* RESTR: Contigüidad hacia la salida (evita huecos vacíos delante de una caja) */
+/* RESTR: contiguidad hacia la salida (huecos vacios al fondo) */
 s.t. ContiguidadSalida {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}:
     sum {k in CAJAS} x[k,s,i,j] <= sum {k in CAJAS} x[k,s,i+1,j];
 
-/* RESTR: Orden de prioridades en la misma columna */
+/* RESTR: prioridades ordenadas con Big-M */
 s.t. OrdenPrioridades {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}:
-    sum {k in CAJAS} p[k] * x[k,s,i+1,j]
-    <= sum {k in CAJAS} p[k] * x[k,s,i,j] + M * (1 - sum {k in CAJAS} x[k,s,i,j]);
+    P[s,i+1,j] <= P[s,i,j] + M * (1 - sum {k in CAJAS} x[k,s,i,j]);
 
-/* RESTR: Capacidad de carga que soporta cada caja */
+/* RESTR: gravedad / soporte */
+s.t. FloatingBox {s in NIVELES, i in FILAS, j in COLUMNAS: s < h}:
+    sum {k in CAJAS} x[k,s+1,i,j] <= sum {k in CAJAS} x[k,s,i,j];
+
+/* RESTR: capacidad de carga */
 s.t. EmptyCapacity {s in NIVELES, i in FILAS, j in COLUMNAS}:
     sum {k_sup in CAJAS, s_sup in NIVELES: s_sup > s} w[k_sup] * x[k_sup,s_sup,i,j]
     <= sum {k in CAJAS} gamma[k] * x[k,s,i,j];
