@@ -49,12 +49,16 @@ s.t. OrdenPrioridades {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     sum {k in CAJAS} p[k] * x[k,i+1,j,s]
     <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - o[i,j,s]);
 
-/* RESTR 7a: c[i,j,s] debe ser al menos la prioridad de delante si atras hay caja */
-s.t. ActivaCosteMin {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+/* RESTR 7a: c[i,j,s] no puede superar la prioridad de la caja de delante (i+1) */
+s.t. ActivaCosteCotaDelante {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     c[i,j,s] >= sum {k in CAJAS} p[k] * x[k,i+1,j,s] - Pmax * (1 - o[i,j,s]);
 
-/* RESTR 7b: c[i,j,s] no puede superar Pmax * o[i,j,s] (fuerza c = 0 si atras esta vacio) */
-s.t. ActivaCosteMax {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+/* RESTR 7b: c[i,j,s] debe ser 0 si en la fila de atras (i) NO hay caja */
+s.t. ActivaCosteCotaAtras {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     c[i,j,s] <= Pmax * o[i,j,s];
+
+/* RESTR 7c: c[i,j,s] debe ser 0 si en la fila de delante (i+1) NO hay caja */
+s.t. ActivaCosteCotaFrente {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+    c[i,j,s] <= sum {k in CAJAS} p[k] * x[k,i+1,j,s];
 
 end;
