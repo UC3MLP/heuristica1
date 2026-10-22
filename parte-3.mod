@@ -17,11 +17,11 @@ param Pmax := max {k in CAJAS} p[k];
 
 var x {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES}, binary; /* x[k,i,j,s] = 1 si caja k en (i,j,s) */
 var o {i in FILAS, j in COLUMNAS, s in NIVELES}, binary;            /* o[i,j,s] = 1 si hay caja real en (i,j,s) */
-var c {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}, >= 0;       /* coste en la posicion trasera i */
+var c {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}, >= 0; /* coste que i recibe de i' */
 
-/* FUNC OBJ: coste medio */
+/* FUNC OBJ: coste medio exacto */
 minimize CosteMedio:
-    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l} c[i,j,s];
+    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS, i_prime in FILAS: i_prime > i} c[i, i_prime, j, s];
 
 /* RESTR 1: una pos por caja */
 s.t. UnaPosicionPorCaja {k in CAJAS}:
@@ -49,16 +49,14 @@ s.t. OrdenPrioridades {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     sum {k in CAJAS} p[k] * x[k,i+1,j,s]
     <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - o[i,j,s]);
 
-/* RESTR 7a: c[i,j,s] no puede superar la prioridad de la caja de delante (i+1) */
-s.t. ActivaCosteCotaDelante {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    c[i,j,s] >= sum {k in CAJAS} p[k] * x[k,i+1,j,s] - Pmax * (1 - o[i,j,s]);
+/* RESTR 7: Linealización exacta del coste c = prioridad(i') si atras (i) esta ocupado */
+s.t. CosteMaxAtras {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}:
+    c[i, i_prime, j, s] <= Pmax * o[i,j,s];
 
-/* RESTR 7b: c[i,j,s] debe ser 0 si en la fila de atras (i) NO hay caja */
-s.t. ActivaCosteCotaAtras {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    c[i,j,s] <= Pmax * o[i,j,s];
+s.t. CosteMaxDelante {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}:
+    c[i, i_prime, j, s] <= sum {k in CAJAS} p[k] * x[k, i_prime, j, s];
 
-/* RESTR 7c: c[i,j,s] debe ser 0 si en la fila de delante (i+1) NO hay caja */
-s.t. ActivaCosteCotaFrente {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    c[i,j,s] <= sum {k in CAJAS} p[k] * x[k,i+1,j,s];
+s.t. CosteMinimo {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}:
+    c[i, i_prime, j, s] >= sum {k in CAJAS} p[k] * x[k, i_prime, j, s] - Pmax * (1 - o[i,j,s]);
 
 end;
