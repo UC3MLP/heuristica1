@@ -17,10 +17,10 @@ param Pmax := max {k in CAJAS} p[k];
 
 var x {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES}, binary; /* x[k,i,j,s] = 1 si caja k en (i,j,s) */
 
-/* FUNC OBJ: coste medio */
+/* FUNC OBJ: coste medio (solo suma si en i hay caja real) */
 minimize CosteMedio:
-    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS, i_prime in FILAS, k in CAJAS: i_prime > i}
-        p[k] * x[k, i_prime, j, s];
+    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in 1..(l-1), i_prime in (i+1)..l, k in CAJAS}
+        p[k] * x[k, i_prime, j, s] * (sum {k_prime in CAJAS} x[k_prime, i, j, s]);
 
 /* RESTR 1: una pos por caja */
 s.t. UnaPosicionPorCaja {k in CAJAS}:
