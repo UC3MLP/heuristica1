@@ -68,13 +68,13 @@ def main():
     num_restr = int(filas_match.group(1)) if filas_match else 0
     num_vars = int(cols_match.group(1)) if cols_match else 0
 
-    # calcular coste medio
+    # calcular coste medio (SOLO si la posición trasera TIENE CAJA)
     coste_total = 0
     for s in range(h):
         for j in range(l):
             for i in range(l - 1):
-                # suma de prioridades delante
-                coste_total += sum(pallet[s][i_p][j] for i_p in range(i + 1, l))
+                if pallet[s][i][j] != 0:  # Si atras hay caja real
+                    coste_total += sum(pallet[s][i_p][j] for i_p in range(i + 1, l))
     coste_medio = coste_total / n
 
     # num var, restr, coste medio
