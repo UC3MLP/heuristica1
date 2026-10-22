@@ -19,12 +19,12 @@ param Pmax := max {k in CAJAS} p[k];
 
 /* VARIABLES DE DECISIÓN */
 var x {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES}, binary; /* x[k,i,j,s] = 1 si caja k en (i,j,s) */
-var o {i in FILAS, j in COLUMNAS, s in NIVELES}, binary;            /* o[i,j,s] = 1 si hay caja real en (i,j,s) */
-var c {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}, >= 0;       /* coste en la posicion trasera i del nivel s */
+var y {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES: i < l}, binary; /* y[k,i,j,s] = 1 si la caja k esta en i+1 Y la fila i esta ocupada */
 
-/* FUNCIÓN OBJETIVO: Coste medio exacto */
+/* FUNCIÓN OBJETIVO: Coste medio directo exacto */
 minimize CosteMedio:
-    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l} c[i,j,s];
+    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS, k in CAJAS: i < l}
+        p[k] * y[k, i, j, s];
 
 /* RESTRICCIONES */
 
@@ -32,13 +32,13 @@ minimize CosteMedio:
 s.t. UnaPosicionPorCaja {k in CAJAS}:
     sum {i in FILAS, j in COLUMNAS, s in NIVELES} x[k,i,j,s] = 1;
 
-/* 2. Definición de ocupación de la celda */
-s.t. DefOcupacion {i in FILAS, j in COLUMNAS, s in NIVELES}:
-    o[i,j,s] = sum {k in CAJAS} x[k,i,j,s];
+/* 2. Una caja como máximo por posición */
+s.t. UnaCajaPorPosicion {i in FILAS, j in COLUMNAS, s in NIVELES}:
+    sum {k in CAJAS} x[k,i,j,s] <= 1;
 
 /* 3. Flotación: no puede haber cajas en el aire */
 s.t. Flotacion {i in FILAS, j in COLUMNAS, s in NIVELES: s < h}:
-    o[i,j,s+1] <= o[i,j,s];
+    sum {k in CAJAS} x[k,i,j,s+1] <= sum {k in CAJAS} x[k,i,j,s];
 
 /* 4. Capacidad de carga */
 s.t. Capacidad {i in FILAS, j in COLUMNAS, s in NIVELES}:
@@ -47,25 +47,25 @@ s.t. Capacidad {i in FILAS, j in COLUMNAS, s in NIVELES}:
 
 /* 5. Sin huecos intermedios (ocupación contigua de delante a atrás) */
 s.t. SinHuecosIntermedios {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    o[i,j,s] <= o[i+1,j,s];
+    sum {k in CAJAS} x[k, i, j, s] <= sum {k in CAJAS} x[k, i+1, j, s];
 
-/* 6. Orden de prioridades: p_delante <= p_atras (Big-M) */
+/* 6. Orden de prioridades: p_delante <= p_atras (si en i hay caja) */
 s.t. OrdenPrioridades {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     sum {k in CAJAS} p[k] * x[k,i+1,j,s]
-    <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - o[i,j,s]);
+    <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - sum {k in CAJAS} x[k,i,j,s]);
 
-/* 7. CÁLCULO DEL COSTE POR CAJA EN DELANTE ACTIVADA POR ATRÁS */
+/* 7. LINEALIZACIÓN EXACTA DE Y (y[k,i,j,s] = x[k,i+1,j,s] AND fila_i_ocupada) */
 
-/* 7a. El coste c de la celda i es la suma de las prioridades de delante activadas si en i hay caja */
-s.t. DefCosteMax {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    c[i,j,s] >= sum {k in CAJAS} p[k] * x[k,i+1,j,s] + Pmax * (o[i,j,s] - 1);
+/* 7a. y[k,i,j,s] solo puede valer 1 si la caja k está efectivamente delante en i+1 */
+s.t. ActivaY_CajaDelante {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+    y[k, i, j, s] <= x[k, i+1, j, s];
 
-/* 7b. Cota superior: fuerza c = 0 si en atras NO hay caja */
-s.t. DefCosteCotaAtras {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    c[i,j,s] <= Pmax * o[i,j,s];
+/* 7b. y[k,i,j,s] solo puede valer 1 si en la fila de atrás (i) HAY una caja real */
+s.t. ActivaY_CajaAtras {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+    y[k, i, j, s] <= sum {k_prime in CAJAS} x[k_prime, i, j, s];
 
-/* 7c. Cota superior: fuerza c <= prioridad de delante */
-s.t. DefCosteCotaDelante {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    c[i,j,s] <= sum {k in CAJAS} p[k] * x[k,i+1,j,s];
+/* 7c. Si la caja k está delante Y en atrás hay una caja real, y[k,i,j,s] DEBE valer 1 */
+s.t. ActivaY_Ambas {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+    y[k, i, j, s] >= x[k, i+1, j, s] + sum {k_prime in CAJAS} x[k_prime, i, j, s] - 1;
 
 end;
