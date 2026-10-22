@@ -17,7 +17,7 @@ param Pmax := max {k in CAJAS} p[k];
 
 var x {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES}, binary; /* x[k,i,j,s] = 1 si caja k en (i,j,s) */
 var o {i in FILAS, j in COLUMNAS, s in NIVELES}, binary;            /* o[i,j,s] = 1 si hay caja real en (i,j,s) */
-var c {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}, >= 0; /* coste que i recibe de i' */
+var c {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}, >= 0; /* coste que i recibe de i' en el nivel s */
 
 /* FUNC OBJ: coste medio exacto */
 minimize CosteMedio:
@@ -49,7 +49,7 @@ s.t. OrdenPrioridades {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     sum {k in CAJAS} p[k] * x[k,i+1,j,s]
     <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - o[i,j,s]);
 
-/* RESTR 7: Linealización exacta del coste c = prioridad(i') si atras (i) esta ocupado */
+/* RESTR 7: Linealización del coste en el MISMO NIVEL s */
 s.t. CosteMaxAtras {i in FILAS, i_prime in FILAS, j in COLUMNAS, s in NIVELES: i_prime > i}:
     c[i, i_prime, j, s] <= Pmax * o[i,j,s];
 
