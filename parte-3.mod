@@ -16,23 +16,24 @@ param g {k in CAJAS}, integer, >= 0;
 param Pmax := max {k in CAJAS} p[k];
 
 var x {k in CAJAS, i in FILAS, j in COLUMNAS, s in NIVELES}, binary; /* x[k,i,j,s] = 1 si caja k en (i,j,s) */
+var o {i in FILAS, j in COLUMNAS, s in NIVELES}, binary;            /* o[i,j,s] = 1 si hay caja real en (i,j,s) */
+var c {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}, >= 0;       /* c[i,j,s] = coste en la pos trasera i */
 
-/* FUNC OBJ: coste medio (solo suma si en i hay caja real) */
+/* FUNC OBJ: coste medio */
 minimize CosteMedio:
-    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in 1..(l-1), i_prime in (i+1)..l, k in CAJAS}
-        p[k] * x[k, i_prime, j, s] * (sum {k_prime in CAJAS} x[k_prime, i, j, s]);
+    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l} c[i,j,s];
 
 /* RESTR 1: una pos por caja */
 s.t. UnaPosicionPorCaja {k in CAJAS}:
     sum {i in FILAS, j in COLUMNAS, s in NIVELES} x[k,i,j,s] = 1;
 
-/* RESTR 2: una caja por pos */
-s.t. UnaCajaPorPosicion {i in FILAS, j in COLUMNAS, s in NIVELES}:
-    sum {k in CAJAS} x[k,i,j,s] <= 1;
+/* RESTR 2: definicion de ocupacion de posicion */
+s.t. DefOcupacion {i in FILAS, j in COLUMNAS, s in NIVELES}:
+    o[i,j,s] = sum {k in CAJAS} x[k,i,j,s];
 
 /* RESTR 3: flotacion (no cajas en el aire) */
 s.t. Flotacion {i in FILAS, j in COLUMNAS, s in NIVELES: s < h}:
-    sum {k in CAJAS} x[k,i,j,s+1] <= sum {k in CAJAS} x[k,i,j,s];
+    o[i,j,s+1] <= o[i,j,s];
 
 /* RESTR 4: capacidad de carga */
 s.t. Capacidad {i in FILAS, j in COLUMNAS, s in NIVELES}:
@@ -41,11 +42,15 @@ s.t. Capacidad {i in FILAS, j in COLUMNAS, s in NIVELES}:
 
 /* RESTR 5: ocupacion sin huecos delante de una caja */
 s.t. SinHuecosIntermedios {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
-    sum {k in CAJAS} x[k, i, j, s] <= sum {k in CAJAS} x[k, i+1, j, s];
+    o[i,j,s] <= o[i+1,j,s];
 
 /* RESTR 6: prioridades ordenadas (p_delante <= p_atras) */
 s.t. OrdenPrioridades {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
     sum {k in CAJAS} p[k] * x[k,i+1,j,s]
-    <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - sum {k in CAJAS} x[k,i,j,s]);
+    <= sum {k in CAJAS} p[k] * x[k,i,j,s] + Pmax * (1 - o[i,j,s]);
+
+/* RESTR 7: activacion lineal del coste (coste = prioridad de delante solo si atras hay caja) */
+s.t. ActivaCoste {i in FILAS, j in COLUMNAS, s in NIVELES: i < l}:
+    c[i,j,s] >= sum {k in CAJAS} p[k] * x[k,i+1,j,s] - Pmax * (1 - o[i,j,s]);
 
 end;
