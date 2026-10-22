@@ -1,10 +1,10 @@
-/* parte3: cajas INCOMPLETAS*/
+/* parte-3.mod */
 
 param l, integer, >= 1;
 param h, integer, >= 1;
 param n, integer, >= 1;
 
-param M, default 100000;
+param M, default 1000;
 
 set CAJAS := 1..n;
 set NIVELES := 1..h;
@@ -17,15 +17,29 @@ param gamma {k in CAJAS}, >= 0;
 
 var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary;
 var P {s in NIVELES, i in FILAS, j in COLUMNAS}, >= 0;
+var C {s in NIVELES, i in FILAS, j in COLUMNAS: i < l}, >= 0;
 
-/* Funcion Objetivo pura de la practica */
+/* FUNCION OBJETIVO: coste medio real de las celdas efectivamente ocupadas */
 minimize CosteMedio:
-    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}
-        sum {i_prime in FILAS: i_prime > i} P[s,i_prime,j];
+    (1/n) * sum {s in NIVELES, j in COLUMNAS, i in FILAS: i < l} C[s,i,j];
 
 s.t. DefPrioridadPosicion {s in NIVELES, i in FILAS, j in COLUMNAS}:
     P[s,i,j] = sum {k in CAJAS} p[k] * x[k,s,i,j];
 
+/* LINEALIZACION EXACTA DE C[s,i,j] */
+/* 1. Si la celda (s,i,j) esta ocupada, C >= suma de prioridades delanteras */
+s.t. DefCostePosicion_CotaInf {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}:
+    C[s,i,j] >= sum {i_prime in FILAS: i_prime > i} P[s,i_prime,j] - M * (1 - sum {k in CAJAS} x[k,s,i,j]);
+
+/* 2. Si la celda (s,i,j) esta VACIA, C <= 0 (la fuerza a ser exactamente 0) */
+s.t. DefCostePosicion_CotaSup1 {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}:
+    C[s,i,j] <= M * sum {k in CAJAS} x[k,s,i,j];
+
+/* 3. Si la celda (s,i,j) esta ocupada, C <= suma de prioridades delanteras */
+s.t. DefCostePosicion_CotaSup2 {s in NIVELES, j in COLUMNAS, i in FILAS: i < l}:
+    C[s,i,j] <= sum {i_prime in FILAS: i_prime > i} P[s,i_prime,j];
+
+/* RESTRICCIONES FISICAS Y DE ESTRUCTURA */
 s.t. UnaPosicionPorCaja {k in CAJAS}:
     sum {s in NIVELES, i in FILAS, j in COLUMNAS} x[k,s,i,j] = 1;
 
