@@ -11,9 +11,9 @@ set FILAS := 1..l;
 set COLUMNAS := 1..l;
 set NIVELES := 1..h;
 
-param p {k in CAJAS}, integer, >= 1;
-param w {k in CAJAS}, integer, >= 0;
-param g {k in CAJAS}, integer, >= 0;
+param p {k in CAJAS} >= 1;
+param w {k in CAJAS} >= 0;
+param g {k in CAJAS} >= 0;
 
 param Pmax := max {k in CAJAS} p[k];
 
