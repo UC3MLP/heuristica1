@@ -37,7 +37,7 @@ s.t. CapacidadCarga {s in NIVELES, i in FILAS, j in COLUMNAS: s < h}:
     sum {k_sup in CAJAS, s_sup in NIVELES: s_sup > s} w[k_sup] * x[k_sup,s_sup,i,j]
     <= sum {k in CAJAS} gamma[k] * x[k,s,i,j];
 
-/* 3. Flotación: no puede haber cajas en el aire */
+/* RESTR: no cajas flotantes */
 s.t. Flotacion {i in FILAS, j in COLUMNAS, s in NIVELES: s < h}:
     sum {k in CAJAS} x[k,i,j,s+1] <= sum {k in CAJAS} x[k,i,j,s];
 
