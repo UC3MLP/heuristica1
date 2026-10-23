@@ -1,4 +1,3 @@
-
 /* p2: cajas CON NIVELES */
 
 param l, integer, >= 1;
@@ -12,7 +11,8 @@ param p {k in CAJAS}, integer, >= 1;
 param w {k in CAJAS}, >= 0;
 param gamma {k in CAJAS}, >= 0;
 
-var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary; /* x[k,s,i,j] = 1 si caja k en pos (s,i,j) */
+/* x[k,s,i,j] -> orden: k (caja), s (nivel), i (fila), j (columna) */
+var x {k in CAJAS, s in NIVELES, i in FILAS, j in COLUMNAS}, binary;
 
 /* FUNC OBJ: coste medio */
 minimize CosteMedio:
