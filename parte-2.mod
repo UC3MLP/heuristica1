@@ -39,6 +39,6 @@ s.t. CapacidadCarga {s in NIVELES, i in FILAS, j in COLUMNAS: s < h}:
 
 /* RESTR: no cajas flotantes */
 s.t. Flotacion {i in FILAS, j in COLUMNAS, s in NIVELES: s < h}:
-    sum {k in CAJAS} x[k,i,j,s+1] <= sum {k in CAJAS} x[k,i,j,s];
+    sum {k in CAJAS} x[k,s+1,i,j] <= sum {k in CAJAS} x[k,s,i,j];
 
 end;
