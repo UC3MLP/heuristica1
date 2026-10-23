@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 # devolver ruta de fichero
 def ruta(nombre):
     p = Path(nombre)
-    if not p.is_absolute() and p.parent == Path("."):
+    if not p.is_absolute() and p.parent == Path(".."):
         return Path(__file__).resolve().parent / p
     return p.resolve()
 
